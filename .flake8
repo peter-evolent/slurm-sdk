@@ -1,0 +1,4 @@
+[flake8]
+exclude = .git,.tox,__pycache__,.eggs,build,venv
+max-line-length = 100
+doctests = true
