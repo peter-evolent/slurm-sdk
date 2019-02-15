@@ -4,7 +4,24 @@ import requests
 from slurmsdk.exceptions import SDKException
 
 
+def merge_dict(*data) -> dict:
+    """Merges any number of dictionaries together
+
+    Args:
+        data: any number of dictionaries
+
+    Returns:
+        result: merged dictionary
+    """
+    result = {}
+    for d in data:
+        result.update(d)
+    return result
+
+
 class HTTPClient:
+    default_headers = {'content-type': 'application/json'}
+
     def make_request(self, method: str, url: str,
                      data: dict = None, headers: dict = None, params: dict = None) -> dict:
         """Makes a HTTP request
@@ -25,12 +42,14 @@ class HTTPClient:
                 - invalid response content-type header
                 - invalid response body (non-json)
         """
+        headers = headers if headers else {}
+
         try:
             resp = requests.request(
                 method=method,
                 url=url,
                 json=data,
-                headers=headers,
+                headers=merge_dict(self.default_headers, headers),
                 params=params
             )
         except requests.exceptions.ConnectionError as e:
@@ -51,7 +70,7 @@ class HTTPClient:
         return data
 
     def get(self, url: str, headers: dict = None, params: dict = None):
-        """Make a HTTP GET Request
+        """Makes a HTTP GET Request
 
         Args:
             url: request url

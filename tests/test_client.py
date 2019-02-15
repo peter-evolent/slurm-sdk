@@ -4,27 +4,45 @@ from unittest.mock import Mock
 import pytest
 import responses
 
-from slurmsdk.client import HTTPClient
+from slurmsdk.client import HTTPClient, merge_dict
 from slurmsdk.exceptions import SDKException
 
 
 @pytest.fixture
-def resp_mock():
+def mock_resp():
     with responses.RequestsMock() as resp:
         yield resp
 
 
 @pytest.fixture
-def make_request_mock(monkeypatch):
+def mock_make_request(monkeypatch):
     mock = Mock()
     monkeypatch.setattr(HTTPClient, 'make_request', mock)
     return mock
 
 
-def test_valid_json_response(resp_mock):
-    url = 'http://my.test.com'
+def test_merge_dict():
+    assert merge_dict({'a': 1}, {'b': 1}) == {'a': 1, 'b': 1}
+
+
+def test_merge_dict_update():
+    assert merge_dict({'a': 1}, {'a': 2}) == {'a': 2}
+
+
+def test_request_content_type_header(mock_resp):
+    url = 'https://fake.com'
+    mock_resp.add('GET', url, content_type='application/json', json={})
+
+    client = HTTPClient()
+    client.make_request('GET', url)
+
+    assert mock_resp.calls[0].request.headers['content-type'] == 'application/json'
+
+
+def test_valid_json_response(mock_resp):
+    url = 'https://fake.com'
     resp_data = {'key': 'value'}
-    resp_mock.add('GET', url, status=200,
+    mock_resp.add('GET', url, status=200,
                   content_type='application/json', json=resp_data)
 
     client = HTTPClient()
@@ -33,10 +51,10 @@ def test_valid_json_response(resp_mock):
     assert resp == resp_data
 
 
-def test_valid_json_error_response(resp_mock):
-    url = 'http://my.test.com'
+def test_valid_json_error_response(mock_resp):
+    url = 'https://fake.com'
     resp_data = {'key': 'value'}
-    resp_mock.add('GET', url, status=400,
+    mock_resp.add('GET', url, status=400,
                   content_type='application/json', json=resp_data)
 
     client = HTTPClient()
@@ -47,8 +65,8 @@ def test_valid_json_error_response(resp_mock):
     assert exc.value.data == resp_data
 
 
-def test_connection_error(resp_mock):
-    url = 'http://my.test.com'
+def test_connection_error(mock_resp):
+    url = 'https://fake.com'
 
     client = HTTPClient()
     with pytest.raises(SDKException) as exc:
@@ -57,9 +75,9 @@ def test_connection_error(resp_mock):
     assert url in exc.value.message
 
 
-def test_invalid_response_content_type(resp_mock):
-    url = 'http://my.test.com'
-    resp_mock.add('GET', url, status=200, content_type='plain/text')
+def test_invalid_response_content_type(mock_resp):
+    url = 'https://fake.com'
+    mock_resp.add('GET', url, status=200, content_type='plain/text')
 
     client = HTTPClient()
     with pytest.raises(SDKException) as exc:
@@ -68,10 +86,10 @@ def test_invalid_response_content_type(resp_mock):
     assert exc.value.message == 'Invalid Content-Type: plain/text'
 
 
-def test_non_json_response(resp_mock):
-    url = 'http://my.test.com'
+def test_non_json_response(mock_resp):
+    url = 'https://fake.com'
     text = 'response body'
-    resp_mock.add('GET', url, status=200, content_type='application/json', body=text)
+    mock_resp.add('GET', url, status=200, content_type='application/json', body=text)
 
     client = HTTPClient()
     with pytest.raises(SDKException) as exc:
@@ -80,92 +98,92 @@ def test_non_json_response(resp_mock):
     assert 'Invalid JSON response' in exc.value.message
 
 
-def test_args_data(resp_mock):
-    url = 'http://my.test.com'
+def test_args_data(mock_resp):
+    url = 'https://fake.com'
     data = {'header': 'value'}
-    resp_mock.add('GET', url, content_type='application/json', json={})
+    mock_resp.add('GET', url, content_type='application/json', json={})
 
     client = HTTPClient()
     client.make_request('GET', url, data=data)
 
-    assert json.loads(resp_mock.calls[0].request.body) == data
+    assert json.loads(mock_resp.calls[0].request.body) == data
 
 
-def test_args_headers(resp_mock):
-    url = 'http://my.test.com'
+def test_args_headers(mock_resp):
+    url = 'https://fake.com'
     headers = {'header': 'value'}
-    resp_mock.add('GET', url, content_type='application/json', json={})
+    mock_resp.add('GET', url, content_type='application/json', json={})
 
     client = HTTPClient()
     client.make_request('GET', url, headers=headers)
 
-    assert resp_mock.calls[0].request.headers.items() >= headers.items()
+    assert mock_resp.calls[0].request.headers.items() >= headers.items()
 
 
-def test_args_params(resp_mock):
-    url = 'http://my.test.com'
+def test_args_params(mock_resp):
+    url = 'https://fake.com'
     params = {'param': 'value'}
-    resp_mock.add('GET', url, content_type='application/json', json={})
+    mock_resp.add('GET', url, content_type='application/json', json={})
 
     client = HTTPClient()
     client.make_request('GET', url, params=params)
 
-    assert resp_mock.calls[0].request.url.endswith('?param=value')
+    assert mock_resp.calls[0].request.url.endswith('?param=value')
 
 
-def test_get(make_request_mock):
+def test_get(mock_make_request):
     headers = {'header': 'value'}
     params = {'param': 'value'}
 
     client = HTTPClient()
-    client.get('http://my.test.com', headers=headers, params=params)
+    client.get('https://fake.com', headers=headers, params=params)
 
-    make_request_mock.assert_called_once_with(
+    mock_make_request.assert_called_once_with(
         'GET',
-        'http://my.test.com',
+        'https://fake.com',
         headers=headers,
         params=params
     )
 
 
-def test_post(make_request_mock):
+def test_post(mock_make_request):
     data = {'key': 'value'}
     headers = {'header': 'value'}
 
     client = HTTPClient()
-    client.post('http://my.test.com', data=data, headers=headers)
+    client.post('https://fake.com', data=data, headers=headers)
 
-    make_request_mock.assert_called_once_with(
+    mock_make_request.assert_called_once_with(
         'POST',
-        'http://my.test.com',
+        'https://fake.com',
         data=data,
         headers=headers
     )
 
 
-def test_put(make_request_mock):
+def test_put(mock_make_request):
     data = {'key': 'value'}
     headers = {'header': 'value'}
 
     client = HTTPClient()
-    client.put('http://my.test.com', data=data, headers=headers)
+    client.put('https://fake.com', data=data, headers=headers)
 
-    make_request_mock.assert_called_once_with(
+    mock_make_request.assert_called_once_with(
         'PUT',
-        'http://my.test.com',
+        'https://fake.com',
         data=data,
         headers=headers
     )
 
 
-def test_delete(make_request_mock):
+def test_delete(mock_make_request):
     headers = {'header': 'value'}
 
     client = HTTPClient()
-    client.delete('http://my.test.com', headers=headers)
+    client.delete('https://fake.com', headers=headers)
 
-    make_request_mock.assert_called_once_with(
+    mock_make_request.assert_called_once_with(
         'DELETE',
-        'http://my.test.com',
+        'https://fake.com',
         headers=headers
     )
