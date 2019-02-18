@@ -1,37 +1,49 @@
-from unittest.mock import Mock
-
 import pytest
 
 from slurmsdk.api import API, protected
 from slurmsdk.exceptions import SDKException
 
 
-def assert_protected(func, *args, **kwargs):
+def raise_auth_error(func, *args, **kwargs):
     with pytest.raises(SDKException) as exc:
         func(*args, **kwargs)
 
-    assert exc.value.message == 'Access token is required'
+    return exc.value.message == 'Access token is required'
 
 
 @pytest.fixture
-def mock_get(monkeypatch):
-    mock = Mock()
-    monkeypatch.setattr('slurmsdk.client.HTTPClient.get', mock)
-    return mock
+def fake_get(monkeypatch):
+    def func(self, url, headers=None, params=None):
+        return {
+            'url': url,
+            'headers': headers,
+            'params': params
+        }
+
+    monkeypatch.setattr('slurmsdk.client.HTTPClient.get', func)
 
 
 @pytest.fixture
-def mock_post(monkeypatch):
-    mock = Mock()
-    monkeypatch.setattr('slurmsdk.client.HTTPClient.post', mock)
-    return mock
+def fake_post(monkeypatch):
+    def func(self, url, data=None, headers=None):
+        return {
+            'url': url,
+            'data': data,
+            'headers': headers
+        }
+
+    monkeypatch.setattr('slurmsdk.client.HTTPClient.post', func)
 
 
 @pytest.fixture
-def mock_delete(monkeypatch):
-    mock = Mock()
-    monkeypatch.setattr('slurmsdk.client.HTTPClient.delete', mock)
-    return mock
+def fake_delete(monkeypatch):
+    def func(self, url, headers=None):
+        return {
+            'url': url,
+            'headers': headers
+        }
+
+    monkeypatch.setattr('slurmsdk.client.HTTPClient.delete', func)
 
 
 def test_protected():
@@ -57,7 +69,7 @@ def test_protected_without_access_token():
             pass
 
     instance = A()
-    assert_protected(instance.protected_method)
+    assert raise_auth_error(instance.protected_method)
 
 
 def test_sanitize_base_url():
@@ -76,144 +88,121 @@ def test_update_access_token():
     assert api.auth_header == {'Authorization': 'Bearer new token'}
 
 
-def test_authenticate(mock_post):
+def test_authenticate(fake_post):
     username = 'user@test.com'
     password = 'pass'
 
     api = API('https://api.fake.com')
     result = api.authenticate(username, password)
 
-    mock_post.assert_called_once_with(
-        'https://api.fake.com/auth/sign-in',
-        data={'username': username, 'password': password},
-    )
-    result == mock_post
+    assert result['url'] == 'https://api.fake.com/auth/sign-in'
+    assert result['data'] == {'username': username, 'password': password}
 
 
-def test_create_user(mock_post):
+def test_create_user(fake_post):
     username = 'user@test.com'
     password = 'pass'
 
     api = API('https://api.fake.com', 'token')
     result = api.create_user(username, password)
 
-    mock_post.assert_called_once_with(
-        'https://api.fake.com/users',
-        data={'username': username, 'password': password},
-        headers={'Authorization': 'Bearer token'}
-    )
-    result == mock_post
+    assert result['url'] == 'https://api.fake.com/users'
+    assert result['data'] == {'username': username, 'password': password}
+    assert result['headers'] == {'Authorization': 'Bearer token'}
 
 
 def test_create_user_raises_access_token_required():
     api = API('https://api.fake.com')
-    assert_protected(api.create_user, 'user@test.com', 'pass')
+    assert raise_auth_error(api.create_user, 'user@test.com', 'pass')
 
 
-def test_list_users(mock_get):
+def test_list_users(fake_get):
     api = API('https://api.fake.com', 'token')
     result = api.list_users()
 
-    mock_get.assert_called_once_with(
-        'https://api.fake.com/users',
-        headers={'Authorization': 'Bearer token'}
-    )
-    result == mock_get
+    assert result['url'] == 'https://api.fake.com/users'
+    assert result['headers'] == {'Authorization': 'Bearer token'}
+    assert result['params'] is None
 
 
 def test_list_users_raises_access_token_required():
     api = API('https://api.fake.com')
-    assert_protected(api.list_users)
+    assert raise_auth_error(api.list_users)
 
 
-def test_list_jobs(mock_get):
+def test_list_jobs(fake_get):
     api = API('https://api.fake.com', 'token')
     result = api.list_jobs()
 
-    mock_get.assert_called_once_with(
-        'https://api.fake.com/jobs',
-        headers={'Authorization': 'Bearer token'},
-        params={'q': None, 'offset': None, 'limit': None}
-    )
-    result == mock_get
+    assert result['url'] == 'https://api.fake.com/jobs'
+    assert result['headers'] == {'Authorization': 'Bearer token'}
+    assert result['params'] == {'q': None, 'offset': None, 'limit': None}
 
 
-def test_list_jobs_with_queryparams(mock_get):
+def test_list_jobs_with_queryparams(fake_get):
     api = API('https://api.fake.com', 'token')
     result = api.list_jobs(q='query', offset=0, limit=1)
 
-    mock_get.assert_called_once_with(
-        'https://api.fake.com/jobs',
-        headers={'Authorization': 'Bearer token'},
-        params={'q': 'query', 'offset': 0, 'limit': 1}
-    )
-    result == mock_get
+    assert result['url'] == 'https://api.fake.com/jobs'
+    assert result['headers'] == {'Authorization': 'Bearer token'}
+    assert result['params'] == {'q': 'query', 'offset': 0, 'limit': 1}
 
 
 def test_list_jobs_raises_access_token_required():
     api = API('https://api.fake.com')
-    assert_protected(api.list_jobs)
+    assert raise_auth_error(api.list_jobs)
 
 
-def test_pause_job(mock_post):
+def test_pause_job(fake_post):
     api = API('https://api.fake.com', 'token')
     result = api.pause_job(1)
 
-    mock_post.assert_called_once_with(
-        'https://api.fake.com/jobs/1/pause',
-        headers={'Authorization': 'Bearer token'}
-    )
-    result == mock_post
+    assert result['url'] == 'https://api.fake.com/jobs/1/pause'
+    assert result['data']is None
+    assert result['headers'] == {'Authorization': 'Bearer token'}
 
 
 def test_pause_job_raises_access_token_required():
     api = API('https://api.fake.com')
-    assert_protected(api.pause_job, 1)
+    assert raise_auth_error(api.pause_job, 1)
 
 
-def test_resume_job(mock_post):
+def test_resume_job(fake_post):
     api = API('https://api.fake.com', 'token')
     result = api.resume_job(1)
 
-    mock_post.assert_called_once_with(
-        'https://api.fake.com/jobs/1/resume',
-        headers={'Authorization': 'Bearer token'}
-    )
-    result == mock_post
+    assert result['url'] == 'https://api.fake.com/jobs/1/resume'
+    assert result['data'] is None
+    assert result['headers'] == {'Authorization': 'Bearer token'}
 
 
 def test_resume_job_raises_access_token_required():
     api = API('https://api.fake.com')
-    assert_protected(api.resume_job, 1)
+    assert raise_auth_error(api.resume_job, 1)
 
 
-def test_retry_job(mock_post):
+def test_retry_job(fake_post):
     api = API('https://api.fake.com', 'token')
     result = api.retry_job(1)
 
-    mock_post.assert_called_once_with(
-        'https://api.fake.com/jobs/1/retry',
-        headers={'Authorization': 'Bearer token'}
-    )
-    result == mock_post
+    assert result['url'] == 'https://api.fake.com/jobs/1/retry'
+    assert result['data'] is None
+    assert result['headers'] == {'Authorization': 'Bearer token'}
 
 
 def test_etry_job_raises_access_token_required():
     api = API('https://api.fake.com')
-    assert_protected(api.retry_job, 1)
+    assert raise_auth_error(api.retry_job, 1)
 
 
-def test_delete_job(mock_delete):
+def test_delete_job(fake_delete):
     api = API('https://api.fake.com', 'token')
     result = api.delete_job(1)
 
-    mock_delete.assert_called_once_with(
-        'https://api.fake.com/jobs/1',
-        headers={'Authorization': 'Bearer token'}
-    )
-    result == mock_post
+    assert result['url'] == 'https://api.fake.com/jobs/1'
+    assert result['headers'] == {'Authorization': 'Bearer token'}
 
 
 def test_delete_job_raises_access_token_required():
     api = API('https://api.fake.com')
-    assert_protected(api.delete_job, 1)
+    assert raise_auth_error(api.delete_job, 1)

@@ -1,5 +1,5 @@
 import json
-from unittest.mock import Mock
+import urllib.parse
 
 import pytest
 import responses
@@ -8,17 +8,23 @@ from slurmsdk.client import HTTPClient, merge_dict
 from slurmsdk.exceptions import SDKException
 
 
+def contain_headers(resp, headers):
+    return resp.calls[0].request.headers.items() >= headers.items()
+
+
+def has_queryparams(resp, params):
+    query = urllib.parse.urlencode(params)
+    return resp.calls[0].request.url.endswith('?' + query)
+
+
+def has_body(resp, data):
+    return json.loads(resp.calls[0].request.body) == data
+
+
 @pytest.fixture
 def mock_resp():
     with responses.RequestsMock() as resp:
         yield resp
-
-
-@pytest.fixture
-def mock_make_request(monkeypatch):
-    mock = Mock()
-    monkeypatch.setattr(HTTPClient, 'make_request', mock)
-    return mock
 
 
 def test_merge_dict():
@@ -106,7 +112,7 @@ def test_args_data(mock_resp):
     client = HTTPClient()
     client.make_request('GET', url, data=data)
 
-    assert json.loads(mock_resp.calls[0].request.body) == data
+    assert has_body(mock_resp, data)
 
 
 def test_args_headers(mock_resp):
@@ -117,7 +123,7 @@ def test_args_headers(mock_resp):
     client = HTTPClient()
     client.make_request('GET', url, headers=headers)
 
-    assert mock_resp.calls[0].request.headers.items() >= headers.items()
+    assert contain_headers(mock_resp, headers)
 
 
 def test_args_params(mock_resp):
@@ -128,62 +134,58 @@ def test_args_params(mock_resp):
     client = HTTPClient()
     client.make_request('GET', url, params=params)
 
-    assert mock_resp.calls[0].request.url.endswith('?param=value')
+    assert has_queryparams(mock_resp, params)
 
 
-def test_get(mock_make_request):
+def test_get(mock_resp):
+    url = 'https://fake.com'
     headers = {'header': 'value'}
     params = {'param': 'value'}
+    mock_resp.add('GET', url, content_type='application/json', json={})
 
     client = HTTPClient()
-    client.get('https://fake.com', headers=headers, params=params)
+    result = client.get(url, headers=headers, params=params)
 
-    mock_make_request.assert_called_once_with(
-        'GET',
-        'https://fake.com',
-        headers=headers,
-        params=params
-    )
+    assert contain_headers(mock_resp, headers)
+    assert has_queryparams(mock_resp, params)
+    assert result == {}
 
 
-def test_post(mock_make_request):
+def test_post(mock_resp):
+    url = 'https://fake.com'
     data = {'key': 'value'}
     headers = {'header': 'value'}
+    mock_resp.add('POST', url, content_type='application/json', json={})
 
     client = HTTPClient()
-    client.post('https://fake.com', data=data, headers=headers)
+    result = client.post(url, data=data, headers=headers)
 
-    mock_make_request.assert_called_once_with(
-        'POST',
-        'https://fake.com',
-        data=data,
-        headers=headers
-    )
+    assert contain_headers(mock_resp, headers)
+    assert has_body(mock_resp, data)
+    assert result == {}
 
 
-def test_put(mock_make_request):
+def test_put(mock_resp):
+    url = 'https://fake.com'
     data = {'key': 'value'}
     headers = {'header': 'value'}
+    mock_resp.add('PUT', url, content_type='application/json', json={})
 
     client = HTTPClient()
-    client.put('https://fake.com', data=data, headers=headers)
+    result = client.put(url, data=data, headers=headers)
 
-    mock_make_request.assert_called_once_with(
-        'PUT',
-        'https://fake.com',
-        data=data,
-        headers=headers
-    )
+    assert contain_headers(mock_resp, headers)
+    assert has_body(mock_resp, data)
+    assert result == {}
 
 
-def test_delete(mock_make_request):
+def test_delete(mock_resp):
+    url = 'https://fake.com'
     headers = {'header': 'value'}
+    mock_resp.add('DELETE', url, content_type='application/json', json={})
 
     client = HTTPClient()
-    client.delete('https://fake.com', headers=headers)
+    result = client.delete(url, headers=headers)
 
-    mock_make_request.assert_called_once_with(
-        'DELETE',
-        'https://fake.com',
-        headers=headers
-    )
+    assert contain_headers(mock_resp, headers)
+    assert result == {}
