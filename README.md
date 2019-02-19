@@ -7,7 +7,7 @@ This is the REST API client for Slurm. It requires Python 3.6 or higher.
 
 First, install the library:
 ```sh
-pip install git+https://github.com/peter-evolent/slurm-sdk.git
+$ pip install git+https://github.com/peter-evolent/slurm-sdk.git
 ```
 
 Then, from a Python interpreter:

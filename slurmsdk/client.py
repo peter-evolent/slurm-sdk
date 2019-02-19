@@ -20,6 +20,7 @@ def merge_dict(*data) -> dict:
 
 
 class HTTPClient:
+    """HTTP Client for JSON API"""
     default_headers = {'content-type': 'application/json'}
 
     def make_request(self, method: str, url: str,
